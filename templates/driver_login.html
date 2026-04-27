@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block theme %}driver{% endblock %}
+
+{% block content %}
+<div class="flex-center" style="min-height: 100vh; padding: 2rem;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary" style="position: absolute; top: 2rem; left: 2rem;">
+        <i class="fa-solid fa-arrow-left"></i> Back
+    </a>
+
+    <div class="glass-panel animate-fade-in" style="width: 100%; max-width: 400px; padding: 3rem 2rem;">
+        <h2 style="font-size: 2rem; margin-bottom: 0.5rem; text-align: center;">Driver Access</h2>
+        <p style="color: var(--text-secondary); text-align: center; margin-bottom: 2rem;">Enter details to start your journey</p>
+
+        <form id="driverLoginForm">
+            <div class="form-group">
+                <label class="form-label">Registered Name</label>
+                <div style="position: relative;">
+                    <i class="fa-solid fa-user" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-secondary);"></i>
+                    <input type="text" id="loginName" class="form-input" style="padding-left: 2.5rem;" placeholder="John Doe" required />
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <label class="form-label">Vehicle Registration</label>
+                <input type="text" id="loginTruck" class="form-input" placeholder="e.g. DL-1C-AA-1111" required style="text-transform: uppercase;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <label class="form-label">Voice Assistant Language</label>
+                <select id="loginLanguage" class="form-input" style="cursor: pointer;">
+                    <option value="en-US">English (Default)</option>
+                    <option value="hi-IN">Hindi (हिंदी)</option>
+                </select>
+            </div>
+            
+            <div id="loginError" style="color: red; margin-bottom: 1rem; display: none;"></div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1rem; font-size: 1.1rem;">
+                Connect to Fleet
+            </button>
+
+            <div style="margin: 1.5rem 0; display: flex; align-items: center;">
+                <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+                <span style="padding: 0 1rem; color: var(--text-secondary);">OR</span>
+                <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+            </div>
+
+            <button type="button" class="btn" style="width: 100%; background: #fff; color: #333; display: flex; justify-content: center; align-items: center; gap: 0.5rem;" onclick="window.location.href='{{ url_for('driver_dashboard') }}'">
+                <i class="fa-brands fa-google" style="color: #DB4437;"></i>
+                Sign in with Google
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('driverLoginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('loginName').value;
+        const truck = document.getElementById('loginTruck').value;
+        const lang = document.getElementById('loginLanguage').value;
+        
+        try {
+            const res = await fetch('/api/driver_login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, truck_number: truck, language: lang })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                window.location.href = "{{ url_for('driver_dashboard') }}";
+            } else {
+                const errDiv = document.getElementById('loginError');
+                errDiv.innerText = data.error;
+                errDiv.style.display = 'block';
+            }
+        } catch(err) {
+            console.error(err);
+        }
+    });
+</script>
+{% endblock %}

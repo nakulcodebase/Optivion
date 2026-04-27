@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block theme %}manager{% endblock %}
+
+{% block content %}
+<div style="display: flex; height: 100vh; overflow: hidden;">
+    <!-- Sidebar -->
+    <div class="glass-panel" style="width: 280px; height: 100%; border-radius: 0; border-right: 1px solid var(--glass-border); display: flex; flex-direction: column; padding: 2rem 1rem;">
+        <h2 style="font-size: 1.5rem; margin-bottom: 2rem; text-align: center; color: var(--accent);">Optivion<br/>Logistics</h2>
+        
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
+            <button class="btn btn-primary tab-btn" data-target="create-tab" style="justify-content: flex-start; border: none;">
+                <i class="fa-solid fa-plus"></i> Create Trip
+            </button>
+            <button class="btn btn-secondary tab-btn" data-target="map-tab" style="justify-content: flex-start; border: none;">
+                <i class="fa-solid fa-map-marked-alt"></i> Live Tracking
+            </button>
+            <button class="btn btn-secondary tab-btn" data-target="fleet-tab" style="justify-content: flex-start; border: none;">
+                <i class="fa-solid fa-truck"></i> Fleet Status
+            </button>
+        </div>
+
+        <button class="btn btn-secondary" style="margin-top: auto;" onclick="window.location.href='{{ url_for('index') }}'">
+            <i class="fa-solid fa-sign-out-alt"></i> Logout
+        </button>
+    </div>
+
+    <!-- Main Content -->
+    <div style="flex: 1; padding: 2rem; overflow-y: auto;">
+        <!-- Create Tab -->
+        <div id="create-tab" class="tab-content animate-fade-in" style="max-width: 800px; margin: 0 auto;">
+            <h1 style="margin-bottom: 2rem;" class="text-gradient">Dispatch New Transport</h1>
+            <form id="createTripForm" class="glass-panel" style="padding: 2.5rem; border-radius: 24px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                    <div class="form-group">
+                        <label class="form-label">Driver Name</label>
+                        <input type="text" id="driverName" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Truck Number</label>
+                        <input type="text" id="truckNumber" class="form-input" style="text-transform: uppercase;" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Vehicle / Fleet Size</label>
+                        <div style="position: relative;">
+                            <i class="fa-solid fa-truck-moving" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-secondary);"></i>
+                            <select id="vehicleSize" class="form-input" style="padding-left: 2.5rem; appearance: auto;" required>
+                                <option value="Small Van (Under 2 Tons)">Small Van (Under 2 Tons)</option>
+                                <option value="Medium Truck (2 - 5 Tons)">Medium Truck (2 - 5 Tons)</option>
+                                <option value="Heavy Fleet Trailer (5+ Tons)">Heavy Fleet Trailer (5+ Tons)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Product Expiry / Deadline</label>
+                        <div style="position: relative;">
+                            <i class="fa-solid fa-hourglass-half" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #ef4444;"></i>
+                            <input type="text" id="productExpiry" class="form-input" style="padding-left: 2.5rem;" placeholder="e.g. 24 Hours" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Initial Point</label>
+                        <div style="position: relative;">
+                            <i class="fa-solid fa-map-pin" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--accent);"></i>
+                            <input type="text" id="originPoint" class="form-input" style="padding-left: 2.5rem;" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Destination Point</label>
+                        <div style="position: relative;">
+                            <i class="fa-solid fa-flag-checkered" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #10b981;"></i>
+                            <input type="text" id="destPoint" class="form-input" style="padding-left: 2.5rem;" required>
+                        </div>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label class="form-label">Stoppage Point (Optional Waypoint)</label>
+                        <div style="position: relative;">
+                            <i class="fa-solid fa-stopwatch" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #f59e0b;"></i>
+                            <input type="text" id="stoppagePoint" class="form-input" style="padding-left: 2.5rem;" placeholder="e.g. Warehouse B">
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 2rem; padding: 1rem; font-size: 1.1rem;">
+                    Generate Optimized Route
+                </button>
+            </form>
+        </div>
+
+        <!-- Map Tab -->
+        <div id="map-tab" class="tab-content animate-fade-in" style="display: none; height: 100%; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h1 class="text-gradient">Live Fleet Tracking</h1>
+                <div style="display: flex; gap: 1rem;">
+                    <input type="text" id="track-truck" class="form-input" placeholder="Enter Truck Number (e.g. AB-12...)" style="width: 250px; text-transform: uppercase;">
+                    <button class="btn btn-primary pulse-glow" onclick="trackLiveDriver()">
+                        <i class="fa-solid fa-satellite-dish"></i> Ping Live Location
+                    </button>
+                </div>
+            </div>
+            <div id="google-manager-map" class="map-container" style="flex: 1; display: flex; align-items: center; justify-content: center; background-image: radial-gradient(var(--border-color) 1px, transparent 1px); background-size: 20px 20px; position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div id="map-loader" style="text-align: center; z-index: 10; background: var(--bg-surface); padding: 2rem; border-radius: 16px; pointer-events: none;">
+                    <i class="fa-solid fa-satellite" style="font-size: 4rem; color: var(--accent); margin-bottom: 1rem; opacity: 0.8;"></i>
+                    <p style="color: var(--text-secondary);">Enter driver coordinates to initiate live tracking...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fleet Tab -->
+        <div id="fleet-tab" class="tab-content animate-fade-in" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h1 class="text-gradient">Active Fleet Dashboard</h1>
+                <button class="btn btn-secondary" onclick="loadFleet()">
+                    <i class="fa-solid fa-arrows-rotate"></i> Refresh Fleet
+                </button>
+            </div>
+            <div id="fleet-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+                <!-- Dynamically populated by JS -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Tab Switching Logic
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => {
+                t.classList.remove('btn-primary');
+                t.classList.add('btn-secondary');
+            });
+            tab.classList.remove('btn-secondary');
+            tab.classList.add('btn-primary');
+            
+            const target = tab.getAttribute('data-target');
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            document.getElementById(target).style.display = target === 'map-tab' ? 'flex' : 'block';
+            
+            if (target === 'fleet-tab') {
+                loadFleet();
+            }
+        });
+    });
+
+    document.getElementById('createTripForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const driverName = document.getElementById('driverName').value;
+        const truckNumber = document.getElementById('truckNumber').value;
+        const vehicleSize = document.getElementById('vehicleSize').value;
+        const expiry = document.getElementById('productExpiry').value;
+        const origin = document.getElementById('originPoint').value;
+        const dest = document.getElementById('destPoint').value;
+        const stoppage = document.getElementById('stoppagePoint').value;
+        
+        // Push the trip to the Driver's dashboard via the backend
+        await fetch('/api/dispatch_trip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                driver_name: driverName, 
+                truck_number: truckNumber, 
+                vehicle_size: vehicleSize,
+                product_expiry: expiry,
+                origin: origin, 
+                destination: dest,
+                stoppage: stoppage
+            })
+        });
+        
+        alert("Trip dispatched to driver successfully!");
+        
+        document.querySelector('[data-target="map-tab"]').click();
+        
+        // Auto-fill the tracking input
+        document.getElementById('track-truck').value = truckNumber;
+        
+        trackLiveDriver();
+    });
+
+    let liveTrackingInterval = null;
+
+    async function trackLiveDriver() {
+        // Clear any existing tracking interval
+        if (liveTrackingInterval) {
+            clearInterval(liveTrackingInterval);
+            liveTrackingInterval = null;
+        }
+
+        const truck = document.getElementById('track-truck').value.toUpperCase();
+        if (!truck) {
+            alert("Please enter a Truck Number to track.");
+            return;
+        }
+
+        const mapContainer = document.getElementById('google-manager-map');
+        
+        mapContainer.innerHTML = `
+            <div id="map-loader" style="text-align: center; z-index: 10; background: var(--bg-surface); padding: 2rem; border-radius: 16px; pointer-events: none;">
+                <i class="fa-solid fa-satellite fa-spin" style="font-size: 4rem; color: var(--accent); margin-bottom: 1rem;"></i>
+                <p style="color: var(--text-secondary);">Establishing secure link with driver GPS...</p>
+            </div>
+        `;
+        
+        try {
+            // First, get the driver's latest data from the backend
+            const tripRes = await fetch(`/api/get_active_trip?truck_number=${truck}`);
+            const tripData = await tripRes.json();
+
+            if (!tripData.success || !tripData.trip) {
+                mapContainer.innerHTML = `<p style="color:red; padding: 2rem;">No active trip found for Truck: ${truck}</p>`;
+                return;
+            }
+
+            const activeTrip = tripData.trip;
+            const currentLiveLocation = activeTrip.current_location || activeTrip.origin;
+
+            // Now, use smart_route to plot the driver's exact current location to the destination
+            const res = await fetch('/api/smart_route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    origin: currentLiveLocation, 
+                    destination: activeTrip.destination,
+                    stoppage: activeTrip.stoppage,
+                    initial_point: activeTrip.origin
+                })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                const iframe = document.createElement('iframe');
+                iframe.style.width = '100%';
+                iframe.style.height = '100%';
+                iframe.style.border = 'none';
+                iframe.style.borderRadius = '12px';
+                
+                mapContainer.innerHTML = '';
+                mapContainer.appendChild(iframe);
+                
+                iframe.contentWindow.document.open();
+                iframe.contentWindow.document.write(data.map_html);
+                iframe.contentWindow.document.close();
+
+                // Setup 2-second live sync polling
+                let lastKnownLoc = currentLiveLocation;
+                liveTrackingInterval = setInterval(async () => {
+                    try {
+                        const syncRes = await fetch(`/api/get_active_trip?truck_number=${truck}`);
+                        const syncData = await syncRes.json();
+                        if (syncData.success && syncData.trip && syncData.trip.current_location) {
+                            const newLoc = syncData.trip.current_location;
+                            if (newLoc !== lastKnownLoc && newLoc.includes(',')) {
+                                lastKnownLoc = newLoc;
+                                const parts = newLoc.split(',');
+                                const lat = parseFloat(parts[0]);
+                                const lng = parseFloat(parts[1]);
+                                if (!isNaN(lat) && !isNaN(lng) && iframe.contentWindow && iframe.contentWindow.updateLiveMarker) {
+                                    iframe.contentWindow.updateLiveMarker(lat, lng);
+                                }
+                            }
+                        }
+                    } catch (e) { console.error("Live sync error", e); }
+                }, 2000);
+
+            } else {
+                mapContainer.innerHTML = `<p style="color:red; padding: 2rem;">Error: ${data.error}</p>`;
+            }
+        } catch(err) {
+            mapContainer.innerHTML = `<p style="color:red; padding: 2rem;">Failed to connect to fleet tracking backend: ${err}</p>`;
+        }
+    }
+
+    async function loadFleet() {
+        const grid = document.getElementById('fleet-grid');
+        grid.innerHTML = '<p style="color: var(--text-secondary);">Loading fleet data...</p>';
+        
+        try {
+            const res = await fetch('/api/get_all_trips');
+            const data = await res.json();
+            
+            if (data.success) {
+                const trips = data.trips;
+                const trucks = Object.keys(trips);
+                
+                if (trucks.length === 0) {
+                    grid.innerHTML = '<p style="color: var(--text-secondary);">No active drivers dispatched.</p>';
+                    return;
+                }
+                
+                grid.innerHTML = '';
+                trucks.forEach(truck => {
+                    const trip = trips[truck];
+                    const card = document.createElement('div');
+                    card.className = 'glass-panel animate-fade-in';
+                    card.style.padding = '1.8rem';
+                    card.style.position = 'relative';
+                    card.style.overflow = 'hidden';
+                    
+                    const statusText = trip.status || 'Pending';
+                    const statusColor = statusText === 'In Transit' ? '#10b981' : (statusText === 'Completed' ? '#3b82f6' : '#f59e0b');
+                    
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <h3 style="margin: 0;">${trip.driver_name}</h3>
+                            <span style="background: var(--accent); color: white; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: bold;">${truck}</span>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <span style="background: ${statusColor}; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;"><i class="fa-solid fa-signal"></i> ${statusText}</span>
+                        </div>
+                        <p style="margin: 0.5rem 0; font-size: 0.9rem;"><i class="fa-solid fa-truck" style="color: var(--text-secondary); width: 20px;"></i> ${trip.vehicle_size}</p>
+                        <p style="margin: 0.5rem 0; font-size: 0.9rem;"><i class="fa-solid fa-map-pin" style="color: var(--text-secondary); width: 20px;"></i> <strong>From:</strong> ${trip.origin}</p>
+                        <p style="margin: 0.5rem 0; font-size: 0.9rem;"><i class="fa-solid fa-flag-checkered" style="color: var(--text-secondary); width: 20px;"></i> <strong>To:</strong> ${trip.destination}</p>
+                        ${trip.stoppage ? `<p style="margin: 0.5rem 0; font-size: 0.9rem;"><i class="fa-solid fa-stopwatch" style="color: var(--text-secondary); width: 20px;"></i> <strong>Stop:</strong> ${trip.stoppage}</p>` : ''}
+                        
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                            <p style="margin: 0; font-size: 0.85rem; color: var(--accent);">
+                                <i class="fa-solid fa-route"></i> Distance Traveled: <strong>${trip.distance_traveled_km || 0.0} km</strong>
+                            </p>
+                        </div>
+                        
+                        <button class="btn btn-primary" onclick="trackFromFleet('${truck}')" style="width: 100%; margin-top: 1rem; padding: 0.5rem;">
+                            <i class="fa-solid fa-location-crosshairs"></i> Open Live Map
+                        </button>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+        } catch (err) {
+            grid.innerHTML = `<p style="color: red;">Error fetching fleet: ${err}</p>`;
+        }
+    }
+
+    function trackFromFleet(truckNumber) {
+        // Switch to map tab
+        document.querySelector('[data-target="map-tab"]').click();
+        // Autofill and ping
+        document.getElementById('track-truck').value = truckNumber;
+        trackLiveDriver();
+    }
+</script>
+{% endblock %}

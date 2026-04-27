@@ -1,0 +1,548 @@
+{% extends "base.html" %}
+
+{% block theme %}driver{% endblock %}
+
+{% block content %}
+<style>
+    #offline-banner {
+        display: none;
+        background: #ef4444;
+        color: white;
+        text-align: center;
+        padding: 0.75rem;
+        font-weight: 600;
+        position: fixed;
+        top: 0; left: 0; width: 100%;
+        z-index: 9999;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.5);
+    }
+    .mobile-panel {
+        position: absolute; 
+        bottom: 2rem; 
+        left: 50%; 
+        transform: translateX(-50%); 
+        width: 90%; 
+        max-width: 1000px; 
+        padding: 1.5rem; 
+        display: flex; 
+        flex-direction: column; 
+        gap: 1rem;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    @media (max-width: 768px) {
+        .mobile-panel {
+            bottom: 0;
+            width: 100%;
+            border-radius: 24px 24px 0 0;
+            padding: 1rem;
+            max-height: 50vh;
+        }
+        .form-row { flex-direction: column !important; }
+        .mobile-btn { padding: 1rem !important; font-size: 1.1rem !important; }
+    }
+</style>
+
+<div id="offline-banner"><i class="fa-solid fa-wifi-slash"></i> OFFLINE MODE: Network Lost. Local GPS tracking and speed calculation active.</div>
+
+<div style="height: 100vh; display: flex; flex-direction: column; overflow: hidden;">
+    <!-- Top Navbar with Glassmorphism -->
+    <div class="glass-panel" style="padding: 1rem 2rem; border-radius: 0; display: flex; justify-content: space-between; align-items: center; z-index: 10; border-top: none; border-left: none; border-right: none;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <i class="fa-solid fa-truck-moving fa-lg text-gradient" style="font-size: 1.5rem;"></i>
+            <h2 style="font-size: 1.4rem; margin: 0;" class="text-gradient">Active Route</h2>
+        </div>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <input type="text" id="driver-origin" class="form-input" placeholder="Current Location" style="width: 200px; padding: 0.6rem;">
+            <input type="text" id="driver-destination" class="form-input" placeholder="Destination" style="width: 200px; padding: 0.6rem;">
+            <button class="btn btn-primary" onclick="loadSmartRoute()" style="padding: 0.6rem 1.2rem;">
+                <i class="fa-solid fa-magic"></i> Smart Route
+            </button>
+            <button id="startJourneyBtn" class="btn btn-primary pulse-glow" onclick="startJourney()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; display: none; padding: 0.6rem 1.2rem; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);">
+                <i class="fa-solid fa-play"></i> Start Journey
+            </button>
+            <a id="googleNavBtn" class="btn btn-primary" href="#" target="_blank" style="background: linear-gradient(135deg, #4285F4 0%, #2b6bdc 100%); color: white; display: none; padding: 0.6rem 1.2rem; text-decoration: none;">
+                <i class="fa-solid fa-location-arrow"></i> Google Nav
+            </a>
+            <button class="btn btn-secondary" onclick="window.location.href='{{ url_for('index') }}'" style="border-radius: 50px; width: 45px; height: 45px; padding: 0; display: flex; justify-content: center; align-items: center;">
+                <i class="fa-solid fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Map Area -->
+    <div style="flex: 1; position: relative; background-color: var(--bg-secondary);">
+        <div id="google-driver-map" class="map-container" style="border-radius: 0; background-image: radial-gradient(var(--border-color) 1px, transparent 1px); background-size: 30px 30px; box-shadow: none; border: none;">
+            <div id="driver-map-loader" class="animate-fade-in" style="text-align: center; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 10; background: var(--bg-surface); padding: 3rem; border-radius: 24px; pointer-events: none; border: 1px solid var(--border-color); backdrop-filter: blur(10px);">
+                <i class="fa-solid fa-compass fa-spin" style="font-size: 3rem; color: var(--accent); margin-bottom: 1rem;"></i>
+                <p style="color: var(--text-primary); font-weight: 500; font-size: 1.1rem; margin: 0;">Generating AI Telemetry...</p>
+            </div>
+        </div>
+        <!-- Info Panel Overlay -->
+        <div class="glass-panel animate-fade-in mobile-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
+                <div>
+                    <h3 style="font-size: 1.2rem; margin: 0;" class="text-gradient"><i class="fa-solid fa-satellite-dish"></i> Live Telemetry Sync</h3>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                <!-- Weather/News Alerts -->
+                <div style="flex: 1; min-width: 250px; padding: 1.2rem; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-left: 4px solid #ef4444; border-radius: 12px; transition: all 0.3s ease;">
+                    <h4 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 0.95rem;"><i class="fa-solid fa-triangle-exclamation"></i> Threat Detection</h4>
+                    <p id="alert-text" style="color: var(--text-secondary); margin: 0; font-size: 0.9rem;">Waiting for route generation...</p>
+                </div>
+                
+                <!-- Hidden Gemini text container for Text-to-Speech -->
+                <div id="gemini-analysis" style="display: none;"></div>
+            </div>
+            
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                <!-- Distance Tracker -->
+                <div class="glass-panel animate-fade-in" style="flex: 1; background: rgba(59, 130, 246, 0.08); padding: 1.5rem; border-left: 4px solid var(--accent); min-width: 150px;">
+                    <h4 style="margin: 0; color: var(--accent); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-route"></i> Distance</h4>
+                    <p id="distance-tracker" style="margin: 0.5rem 0 0 0; font-size: 1.5rem; font-weight: 800; color: var(--text-primary); font-family: 'Outfit', sans-serif;">0.00 <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">km</span></p>
+                </div>
+                <!-- Speed Tracker -->
+                <div class="glass-panel animate-fade-in" style="flex: 1; background: rgba(16, 185, 129, 0.08); padding: 1.5rem; border-left: 4px solid #10b981; min-width: 150px;">
+                    <h4 style="margin: 0; color: #10b981; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-gauge-high"></i> Live Speed</h4>
+                    <p id="speed-tracker" style="margin: 0.5rem 0 0 0; font-size: 1.5rem; font-weight: 800; color: var(--text-primary); font-family: 'Outfit', sans-serif;">0 <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">km/h</span></p>
+                </div>
+                <!-- 72 Hr Countdown -->
+                <div class="glass-panel animate-fade-in" style="flex: 1.5; background: rgba(245, 158, 11, 0.08); padding: 1.5rem; border-left: 4px solid #f59e0b; min-width: 200px;">
+                    <h4 style="margin: 0; color: #f59e0b; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-hourglass-half"></i> Delivery Window</h4>
+                    <p id="countdown-tracker" style="margin: 0.5rem 0 0.2rem 0; font-size: 1.5rem; font-weight: 800; color: var(--text-primary); font-family: 'Outfit', sans-serif;">72:00:00</p>
+                    <p id="eta-status" style="margin: 0; font-size: 0.8rem; color: var(--text-secondary);">ETA Status: Pending</p>
+                </div>
+            </div>
+            
+            <!-- Live Updates Log Widget -->
+            <div class="glass-panel animate-fade-in" style="margin-top: 0.5rem; background: rgba(255, 255, 255, 0.03); padding: 1rem; border-radius: 12px; border-left: 4px solid #8b5cf6;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #8b5cf6; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;"><i class="fa-solid fa-list-ul"></i> Mission Log Updates</h4>
+                <div id="updates-log" style="max-height: 80px; overflow-y: auto; font-size: 0.85rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.3rem;">
+                    <div style="padding: 0.2rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">Awaiting journey initialization...</div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+    </div>
+</div>
+
+<!-- AI Notification Toast -->
+<div id="ai-toast" class="glass-panel" style="position: fixed; top: 20px; right: 20px; width: 350px; padding: 1.5rem; border-left: 4px solid #8b5cf6; transform: translateX(120%); transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+        <i class="fa-solid fa-brain" style="color: #8b5cf6; font-size: 1.5rem;"></i>
+        <h4 style="margin: 0; color: var(--text-primary);">Optivion AI Dispatch</h4>
+    </div>
+    <p id="toast-message" style="margin: 0; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;"></p>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Preload voices
+    window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+    };
+
+    let currentLocation = null;
+    let initialPoint = null;
+    let isJourneyStarted = false;
+    let totalDistanceKm = 0;
+    let lastSyncTime = 0;
+    let isOffline = !navigator.onLine;
+    
+    function logUpdate(msg) {
+        const logContainer = document.getElementById('updates-log');
+        const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const entry = document.createElement('div');
+        entry.style.padding = '0.2rem 0';
+        entry.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+        entry.innerHTML = `<strong style="color: var(--text-primary);">${time}</strong>: ${msg}`;
+        logContainer.prepend(entry);
+    }
+
+    // Offline / Online Event Listeners
+    window.addEventListener('offline', () => {
+        isOffline = true;
+        document.getElementById('offline-banner').style.display = 'block';
+        logUpdate("Warning: Network disconnected. Switching to local offline tracking.");
+    });
+    
+    window.addEventListener('online', () => {
+        isOffline = false;
+        document.getElementById('offline-banner').style.display = 'none';
+        logUpdate("Network restored. Syncing telemetry with server.");
+    });
+
+    // Handle initial state
+    if (isOffline) {
+        document.getElementById('offline-banner').style.display = 'block';
+    }
+    
+    function updateCountdown() {
+        if (!isJourneyStarted || !journeyStartTime) return;
+        
+        const now = Date.now();
+        const elapsedMs = now - journeyStartTime;
+        const total72Ms = 72 * 60 * 60 * 1000;
+        let leftMs = total72Ms - elapsedMs;
+        
+        if (leftMs < 0) leftMs = 0;
+        
+        const hours = Math.floor(leftMs / (1000 * 60 * 60));
+        const minutes = Math.floor((leftMs % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((leftMs % (1000 * 60)) / 1000);
+        
+        const pad = n => n.toString().padStart(2, '0');
+        document.getElementById('countdown-tracker').innerText = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        
+        // Simple ETA calculation: speed = dist / elapsed
+        if (elapsedMs > 60000 && totalDistanceKm > 0.1) {
+            const speedKmsPerMs = totalDistanceKm / elapsedMs;
+            // Assume total trip might be 500km for ETA demonstration if not fully fetched
+            const assumedTotal = 500; 
+            const remainingDist = Math.max(0, assumedTotal - totalDistanceKm);
+            const msRemaining = remainingDist / speedKmsPerMs;
+            
+            if (msRemaining > leftMs) {
+                document.getElementById('eta-status').innerHTML = '<span style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> Alert: Likely Late</span>';
+            } else {
+                document.getElementById('eta-status').innerHTML = '<span style="color: #10b981;"><i class="fa-solid fa-check"></i> Status: On Time</span>';
+            }
+        }
+    }
+    
+    setInterval(updateCountdown, 1000);
+
+    // Use Geolocation to pre-fill origin if available
+    if ('geolocation' in navigator) {
+        navigator.geolocation.watchPosition(async (position) => {
+            currentLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+            const locStr = `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+            
+            // Only update the input if it's empty or we haven't loaded yet
+            if (!document.getElementById('driver-origin').value) {
+                document.getElementById('driver-origin').value = locStr;
+            }
+
+            // Sync live location back to the manager if online
+            if (!isOffline) {
+                try {
+                    const res = await fetch('/api/update_location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location: locStr })
+                    });
+                    const locData = await res.json();
+                    if (locData.success && locData.distance_traveled_km !== undefined) {
+                        const newDist = locData.distance_traveled_km;
+                        
+                        // Calculate speed
+                        const now = Date.now();
+                        if (lastSyncTime > 0 && newDist > totalDistanceKm) {
+                            const distDiff = newDist - totalDistanceKm;
+                            const timeDiffHrs = (now - lastSyncTime) / (1000 * 60 * 60);
+                            if (timeDiffHrs > 0) {
+                                let speedKmph = position.coords.speed ? (position.coords.speed * 3.6) : (distDiff / timeDiffHrs);
+                                if (speedKmph > 150) speedKmph = 150; 
+                                document.getElementById('speed-tracker').innerHTML = `${Math.round(speedKmph)} <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">km/h</span>`;
+                            }
+                        }
+                        
+                        totalDistanceKm = newDist;
+                        lastSyncTime = now;
+                        document.getElementById('distance-tracker').innerHTML = `${newDist.toFixed(2)} <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">km</span>`;
+                    }
+                } catch (err) { console.error("Error syncing location:", err); }
+            } else {
+                // OFFLINE MODE: Calculate Haversine locally to update UI even without server
+                if (currentLocation && lastSyncTime > 0) {
+                    const now = Date.now();
+                    const R = 6371; // Earth radius in km
+                    const dLat = (position.coords.latitude - currentLocation.lat) * Math.PI / 180;
+                    const dLon = (position.coords.longitude - currentLocation.lng) * Math.PI / 180;
+                    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                              Math.cos(currentLocation.lat * Math.PI / 180) * Math.cos(position.coords.latitude * Math.PI / 180) * 
+                              Math.sin(dLon/2) * Math.sin(dLon/2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    const distDiff = R * c;
+                    
+                    if (distDiff > 0.01) { // Only update if moved more than 10 meters
+                        totalDistanceKm += distDiff;
+                        document.getElementById('distance-tracker').innerHTML = `${totalDistanceKm.toFixed(2)} <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">km</span> (Offline)`;
+                        
+                        const timeDiffHrs = (now - lastSyncTime) / (1000 * 60 * 60);
+                        let speedKmph = position.coords.speed ? (position.coords.speed * 3.6) : (distDiff / timeDiffHrs);
+                        if (speedKmph > 150) speedKmph = 150;
+                        document.getElementById('speed-tracker').innerHTML = `${Math.round(speedKmph)} <span style="font-size: 0.9rem; color: var(--text-secondary); font-weight: 500;">km/h</span>`;
+                    }
+                    lastSyncTime = now;
+                }
+            }
+
+            // If journey started, pan the map live
+            if (isJourneyStarted) {
+                const iframe = document.querySelector('#google-driver-map iframe');
+                if (iframe && iframe.contentWindow && iframe.contentWindow.updateLiveMarker) {
+                    iframe.contentWindow.updateLiveMarker(position.coords.latitude, position.coords.longitude);
+                }
+            }
+
+        }, (err) => {
+            console.error(err);
+        }, { enableHighAccuracy: true });
+    }
+
+    let currentStoppage = '';
+    let vehicleSize = '';
+    let productExpiry = '';
+
+    // Check for dispatched trip from manager on load
+    window.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const res = await fetch('/api/get_active_trip');
+            const data = await res.json();
+            if (data.success && data.trip.destination) {
+                // The manager has set a destination!
+                document.getElementById('driver-destination').value = data.trip.destination;
+                
+                // If manager also set an origin and GPS isn't ready yet, use it
+                if (data.trip.origin) {
+                    initialPoint = data.trip.origin;
+                    if (!document.getElementById('driver-origin').value) {
+                        document.getElementById('driver-origin').value = data.trip.origin;
+                    }
+                }
+
+                // If manager set a stoppage point or other details
+                if (data.trip.stoppage) currentStoppage = data.trip.stoppage;
+                if (data.trip.vehicle_size) vehicleSize = data.trip.vehicle_size;
+                if (data.trip.product_expiry) productExpiry = data.trip.product_expiry;
+                
+                // Show a quick alert to the driver
+                const alertBox = document.getElementById('alert-text');
+                if (alertBox) {
+                    let msg = `<strong>Incoming Dispatch:</strong> Route to ${data.trip.destination}.`;
+                    if (vehicleSize) msg += `<br><strong>Vehicle:</strong> ${vehicleSize}`;
+                    if (productExpiry) msg += `<br><strong>Deadline:</strong> ${productExpiry}`;
+                    if (currentStoppage) msg += `<br><strong>Stoppage:</strong> ${currentStoppage}`;
+                    alertBox.innerHTML = msg;
+                }
+                
+                // Restore distance traveled
+                if (data.trip.distance_traveled_km) {
+                    const distElement = document.getElementById('distance-tracker');
+                    if (distElement) {
+                        distElement.innerHTML = `${data.trip.distance_traveled_km.toFixed(2)} <span style="font-size: 1rem; color: var(--text-secondary); font-weight: 500;">km</span>`;
+                    }
+                }
+
+                // Restore Journey Status
+                if (data.trip.status === "In Transit") {
+                    isJourneyStarted = true;
+                    if (data.trip.start_time) {
+                        journeyStartTime = data.trip.start_time;
+                    } else {
+                        journeyStartTime = Date.now();
+                    }
+                    
+                    const btn = document.getElementById('startJourneyBtn');
+                    if (btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-check-circle"></i> Journey Started`;
+                        btn.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+                        btn.disabled = true;
+                        btn.style.display = 'inline-flex';
+                    }
+                    logUpdate("Restored active journey session from server.");
+                }
+
+                // Optional: Auto-load the route
+                if (document.getElementById('driver-origin').value && document.getElementById('driver-destination').value) {
+                    logUpdate(`Preparing route analysis to ${data.trip.destination}...`);
+                    loadSmartRoute();
+                }
+            }
+        } catch (e) {
+            console.error("Could not fetch active trip:", e);
+        }
+    });
+
+    async function loadSmartRoute() {
+        const originInput = document.getElementById('driver-origin').value;
+        const destInput = document.getElementById('driver-destination').value;
+        
+        if (!originInput || !destInput) {
+            alert("Please enter both Origin and Destination");
+            return;
+        }
+
+        const mapContainer = document.getElementById('google-driver-map');
+        const alertBox = document.getElementById('alert-text');
+        const geminiBox = document.getElementById('gemini-analysis');
+        
+        // Show loading state
+        mapContainer.innerHTML = `
+            <div id="driver-map-loader" style="text-align: center; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 10; background: var(--bg-surface); padding: 2rem; border-radius: 16px;">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 4rem; color: var(--accent); margin-bottom: 1rem;"></i>
+                <p style="color: var(--text-secondary);">AI Analyzing Weather, News, and Traffic...</p>
+            </div>
+        `;
+        alertBox.innerHTML = "Fetching real-time updates...";
+        geminiBox.innerHTML = "Processing environment parameters...";
+        
+        try {
+            const res = await fetch('/api/smart_route', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    origin: originInput, 
+                    destination: destInput,
+                    stoppage: currentStoppage,
+                    vehicle_size: vehicleSize,
+                    product_expiry: productExpiry,
+                    initial_point: initialPoint
+                })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                const iframe = document.createElement('iframe');
+                iframe.style.width = '100%';
+                iframe.style.height = '100%';
+                iframe.style.border = 'none';
+                
+                mapContainer.innerHTML = '';
+                mapContainer.appendChild(iframe);
+                
+                iframe.contentWindow.document.open();
+                iframe.contentWindow.document.write(data.map_html);
+                iframe.contentWindow.document.close();
+
+                // Update UI with AI Analysis
+                alertBox.innerHTML = `<strong>Incident:</strong> ${data.alerts.incident}<br><strong>Weather:</strong> ${data.alerts.weather}`;
+                
+                if (data.gemini_analysis) {
+                    const geminiBox = document.getElementById('gemini-analysis');
+                    geminiBox.innerHTML = data.gemini_analysis;
+                    
+                    // Show Toast Notification
+                    const toast = document.getElementById('ai-toast');
+                    document.getElementById('toast-message').innerText = data.gemini_analysis;
+                    toast.style.transform = 'translateX(0)';
+                    
+                    // Hide Toast after 15 seconds
+                    setTimeout(() => {
+                        toast.style.transform = 'translateX(120%)';
+                    }, 15000);
+
+                    // Speak the response in the driver's language
+                    speakAnalysis();
+                }
+
+                // Show Start Journey button once route is ready
+                document.getElementById('startJourneyBtn').style.display = 'block';
+
+                // Configure Google Navigation Deep Link
+                
+                // Show Google Nav option
+                const navBtn = document.getElementById('googleNavBtn');
+                const navUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(originInput)}&destination=${encodeURIComponent(destInput)}&travelmode=driving`;
+                navBtn.href = navUrl;
+                navBtn.style.display = 'block';
+
+                logUpdate("AI Telemetry processing complete. Route ready.");
+            } else {
+                mapContainer.innerHTML = `<p style="color:red; padding: 2rem;">Error: ${data.error}</p>`;
+                alertBox.innerHTML = "Error occurred.";
+                logUpdate("Error generating smart route.");
+            }
+        } catch(err) {
+            mapContainer.innerHTML = `<p style="color:red; padding: 2rem;">Failed to connect to backend: ${err}</p>`;
+            if (isOffline) {
+                logUpdate("Cannot generate new route while offline.");
+            }
+        }
+    }
+
+    async function startJourney() {
+        try {
+            const res = await fetch('/api/update_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'In Transit' })
+            });
+            const data = await res.json();
+            if (data.success) {
+                isJourneyStarted = true;
+                if (data.start_time) {
+                    journeyStartTime = data.start_time;
+                } else {
+                    journeyStartTime = Date.now();
+                }
+                
+                const btn = document.getElementById('startJourneyBtn');
+                btn.innerHTML = `<i class="fa-solid fa-check-circle"></i> Journey Started`;
+                btn.style.backgroundColor = '#059669'; // Darker green
+                btn.disabled = true;
+                alert("Journey Started! Your Live Location is now visible to the Transport Manager.");
+                
+                logUpdate("Journey started! Tracking telemetry.");
+
+                // Immediately force marker update if we have a location
+                if (currentLocation && currentLocation.lat && currentLocation.lng) {
+                    const iframe = document.querySelector('#google-driver-map iframe');
+                    if (iframe && iframe.contentWindow && iframe.contentWindow.updateLiveMarker) {
+                        iframe.contentWindow.updateLiveMarker(currentLocation.lat, currentLocation.lng);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Failed to start journey", e);
+            if (isOffline) logUpdate("Cannot start journey while offline.");
+        }
+    }
+
+    function speakAnalysis() {
+        const geminiBox = document.getElementById('gemini-analysis');
+        const textToSpeak = geminiBox.textContent || geminiBox.innerText;
+        
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.0;
+        
+        const driverLang = "{{ driver_lang | default('en-US') }}";
+        utterance.lang = driverLang;
+
+        // Force browser to actually pick a Hindi voice if available
+        if (driverLang === 'hi-IN') {
+            const voices = window.speechSynthesis.getVoices();
+            const hindiVoice = voices.find(v => v.lang.includes('hi-IN') || v.lang.includes('hi'));
+            if (hindiVoice) {
+                utterance.voice = hindiVoice;
+            }
+        }
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    // Auto-analyze route every 5 minutes (300,000 ms) as requested
+    setInterval(() => {
+        if (isJourneyStarted) {
+            console.log("5-Minute Auto-Analysis: Re-evaluating route, weather, and news...");
+            // Show a tiny notification so driver knows it's thinking
+            const btn = document.getElementById('startJourneyBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing path...`;
+            
+            loadSmartRoute().finally(() => {
+                btn.innerHTML = originalText;
+            });
+        }
+    }, 300000);
+</script>
+{% endblock %}

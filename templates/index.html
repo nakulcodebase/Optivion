@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Animated Background Blobs */
+    .bg-blobs {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        overflow: hidden; z-index: -1;
+        background: #020617; /* Deep Slate Background */
+    }
+    .blob {
+        position: absolute;
+        filter: blur(80px);
+        opacity: 0.4;
+        animation: float 20s infinite ease-in-out alternate;
+    }
+    .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #3b82f6; border-radius: 50%; }
+    .blob-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: #8b5cf6; border-radius: 50%; animation-delay: -10s; }
+    
+    @keyframes float {
+        0% { transform: translate(0, 0) scale(1); }
+        100% { transform: translate(10%, 10%) scale(1.1); }
+    }
+    
+    .hero-container {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        position: relative;
+    }
+    
+    .role-card {
+        padding: 3rem 2rem;
+        border-radius: 24px;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .role-card:hover {
+        transform: translateY(-10px);
+        background: rgba(15, 23, 42, 0.8);
+        border-color: rgba(59, 130, 246, 0.4);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    .icon-wrapper {
+        width: 80px; height: 80px;
+        border-radius: 20px;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 2rem;
+        font-size: 2rem;
+        box-shadow: inset 0 2px 4px rgba(255,255,255,0.1);
+    }
+</style>
+
+<div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+</div>
+
+<div class="hero-container">
+    <div class="animate-fade-in" style="text-align: center; margin-bottom: 4rem; max-width: 800px;">
+        <div style="display: inline-block; padding: 0.5rem 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 50px; color: #60a5fa; font-weight: 600; margin-bottom: 1.5rem; letter-spacing: 1px; font-size: 0.85rem;">
+            ENTERPRISE LOGISTICS PLATFORM
+        </div>
+        <h1 style="font-size: 4rem; margin-bottom: 1.5rem; color: #ffffff; letter-spacing: -0.03em; line-height: 1.1;">
+            Optivion <span class="text-gradient">Smart Logistics</span>
+        </h1>
+        <p style="color: #94a3b8; font-size: 1.25rem; line-height: 1.6; max-width: 600px; margin: 0 auto;">
+            Next-generation fleet management powered by Gemini AI and live OpenStreetMap algorithmic rerouting.
+        </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem; width: 100%; max-width: 900px;" class="animate-fade-in">
+        
+        <div class="role-card" onclick="window.location.href='{{ url_for('manager_login') }}'" style="cursor: pointer;">
+            <div class="icon-wrapper" style="background: linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(37,99,235,0.4) 100%); color: #60a5fa;">
+                <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <h3 style="color: #ffffff; font-size: 1.5rem; margin-bottom: 1rem;">Transport Manager</h3>
+            <p style="color: #94a3b8; margin-bottom: 2.5rem; line-height: 1.5;">
+                Access the command center. Dispatch fleets, monitor live telemetry, and set algorithmic routing constraints.
+            </p>
+            <button class="btn btn-primary" style="width: 100%; padding: 1rem; border-radius: 14px;">
+                Enter Command Center <i class="fa-solid fa-arrow-right"></i>
+            </button>
+        </div>
+
+        <div class="role-card" onclick="window.location.href='{{ url_for('driver_login') }}'" style="cursor: pointer;">
+            <div class="icon-wrapper" style="background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 100%); color: #f8fafc;">
+                <i class="fa-solid fa-truck-moving"></i>
+            </div>
+            <h3 style="color: #ffffff; font-size: 1.5rem; margin-bottom: 1rem;">Driver Portal</h3>
+            <p style="color: #94a3b8; margin-bottom: 2.5rem; line-height: 1.5;">
+                Access dynamic navigation. Receive AI voice alerts and algorithmic detour instructions in real-time.
+            </p>
+            <button class="btn btn-secondary" style="width: 100%; padding: 1rem; border-radius: 14px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: white;">
+                Connect to Fleet <i class="fa-solid fa-satellite-dish"></i>
+            </button>
+        </div>
+        
+    </div>
+</div>
+{% endblock %}
