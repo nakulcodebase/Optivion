@@ -4,6 +4,8 @@ import folium
 import polyline
 import os
 import math
+import json
+import base64
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, db as rtdb
@@ -18,14 +20,32 @@ API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
 # Initialize Firebase Admin
 db = None
 try:
-    if os.path.exists('firebase-key.json'):
+    cred = None
+    
+    # Try to load from environment variable (Vercel)
+    firebase_key_base64 = os.environ.get('FIREBASE_SERVICE_ACCOUNT_BASE64')
+    if firebase_key_base64:
+        # Decode base64 to JSON
+        firebase_key_json = base64.b64decode(firebase_key_base64).decode('utf-8')
+        firebase_key_dict = json.loads(firebase_key_json)
+        cred = credentials.Certificate(firebase_key_dict)
+        print("Firebase initialized from environment variable (Vercel)")
+    
+    # Fall back to local file (for local development)
+    elif os.path.exists('firebase-key.json'):
         cred = credentials.Certificate('firebase-key.json')
+        print("Firebase initialized from local file")
+    
+    # Initialize app if credentials were loaded
+    if cred:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred, {
                 'databaseURL': 'https://optivion-4ae9f-default-rtdb.asia-southeast1.firebasedatabase.app'
             })
         db = rtdb.reference()
         print("Firebase Realtime Database connected successfully!")
+    else:
+        print("Warning: No Firebase credentials found")
 except Exception as e:
     print(f"Error initializing Firebase RTDB: {e}")
 
