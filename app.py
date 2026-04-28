@@ -5,11 +5,8 @@ import polyline
 import os
 import json
 import math
-from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, db as rtdb
-
-load_dotenv() # Load variables from .env
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'optivion-secret-key'
