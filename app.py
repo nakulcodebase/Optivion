@@ -324,30 +324,94 @@ def smart_route():
 
     try:
         import requests
+        import networkx as nx
+        import osmnx as ox
         
-        # 1. Open Source Routing Machine (OSRM) - Primary Route
+        # 1. NetworkX A* Routing - Primary Route
         o_lat, o_lng = geocode_to_latlng(origin)
         d_lat, d_lng = geocode_to_latlng(destination)
         
         if o_lat is None or d_lat is None:
             return jsonify({'success': False, 'error': 'Could not geocode locations'})
             
-        coords_str = f"{o_lng},{o_lat}"
+        points_lat = [o_lat, d_lat]
+        points_lng = [o_lng, d_lng]
+        
         s_lat, s_lng = None, None
         if stoppage:
             s_lat, s_lng = geocode_to_latlng(stoppage)
             if s_lat is not None:
-                coords_str += f";{s_lng},{s_lat}"
-        coords_str += f";{d_lng},{d_lat}"
+                points_lat.append(s_lat)
+                points_lng.append(s_lng)
+                
+        min_lat, max_lat = min(points_lat), max(points_lat)
+        min_lng, max_lng = min(points_lng), max(points_lng)
+        center_lat = (min_lat + max_lat) / 2.0
+        center_lng = (min_lng + max_lng) / 2.0
         
-        osrm_url = f"http://router.project-osrm.org/route/v1/driving/{coords_str}?overview=full&geometries=polyline"
-        osrm_res = requests.get(osrm_url).json()
+        engine_used = ""
         
-        if osrm_res.get('code') != 'Ok':
-            return jsonify({'success': False, 'error': 'OSRM Routing failed.'})
+        # Calculate radius in meters to determine the route length
+        diag_km = haversine(min_lat, min_lng, max_lat, max_lng)
+        
+        if diag_km > 25:
+            # HYBRID FALLBACK: For long routes, live downloading the street grid via NetworkX/OSMnx
+            # takes too long and crashes the server. We fallback to the pre-compiled OSRM engine.
+            engine_used = "OSRM (Fast Long-Distance)"
             
-        primary_coords = polyline.decode(osrm_res['routes'][0]['geometry'])
-        
+            coords_str = f"{o_lng},{o_lat}"
+            if s_lat is not None:
+                coords_str += f";{s_lng},{s_lat}"
+            coords_str += f";{d_lng},{d_lat}"
+            
+            osrm_url = f"http://router.project-osrm.org/route/v1/driving/{coords_str}?overview=full&geometries=polyline"
+            osrm_res = requests.get(osrm_url).json()
+            
+            if osrm_res.get('code') != 'Ok':
+                return jsonify({'success': False, 'error': 'OSRM Routing failed.'})
+                
+            primary_coords = polyline.decode(osrm_res['routes'][0]['geometry'])
+            
+            # Detour logic for OSRM
+            has_obstruction = False
+            # Check for incidents later, but placeholder here
+            alt_coords = []
+            
+        else:
+            # Use NetworkX A* for precise local routing
+            engine_used = "NetworkX A* (Local Precision)"
+            ox.settings.use_cache = True
+            ox.settings.log_console = False
+            
+            kwargs = {'network_type': 'drive'}
+                
+            # Use a tight bounding box instead of a massive circular radius to drastically cut download times
+            buffer = 0.02 # roughly 2km buffer around the route bounds
+            bbox = (min_lng - buffer, min_lat - buffer, max_lng + buffer, max_lat + buffer)
+            
+            try:
+                G = ox.graph_from_bbox(bbox=bbox, **kwargs)
+            except TypeError:
+                G = ox.graph_from_bbox(max_lat + buffer, min_lat - buffer, max_lng + buffer, min_lng - buffer, **kwargs)
+            
+            o_node = ox.distance.nearest_nodes(G, o_lng, o_lat)
+            d_node = ox.distance.nearest_nodes(G, d_lng, d_lat)
+            
+            def heuristic(u, v):
+                return haversine(G.nodes[u]['y'], G.nodes[u]['x'], G.nodes[v]['y'], G.nodes[v]['x']) * 1000
+                
+            primary_nodes = []
+            if s_lat is not None:
+                s_node = ox.distance.nearest_nodes(G, s_lng, s_lat)
+                path1 = nx.astar_path(G, o_node, s_node, heuristic=heuristic, weight='length')
+                path2 = nx.astar_path(G, s_node, d_node, heuristic=heuristic, weight='length')
+                primary_nodes = path1[:-1] + path2
+            else:
+                primary_nodes = nx.astar_path(G, o_node, d_node, heuristic=heuristic, weight='length')
+                
+            primary_coords = [[G.nodes[n]['y'], G.nodes[n]['x']] for n in primary_nodes]
+            alt_coords = []
+            
         # Determine incident point (exactly 2.5 km ahead on the route)
         accumulated_dist = 0.0
         incident_coord = primary_coords[0] if primary_coords else [0, 0]
@@ -380,7 +444,7 @@ def smart_route():
         if not merge_coord:
             merge_coord = [d_lat, d_lng]
 
-        # 2. Integrate Open-Meteo Weather API & Live News API
+        # Integrate Open-Meteo Weather API & Live News API
         weather_alert = "Clear conditions."
         news_alert = "No major traffic incidents reported."
         weather_marker_lat = None
@@ -396,7 +460,6 @@ def smart_route():
                 if n_res.get('status') == 'ok' and n_res.get('articles'):
                     news_alert = "ALERT: " + n_res['articles'][0]['title']
                 else:
-                    # Fallback to GNews if it's a GNews key
                     n_url2 = f"https://gnews.io/api/v4/search?q={current_city}+traffic+OR+accident&lang=en&max=1&apikey={news_key}"
                     n_res2 = requests.get(n_url2).json()
                     if 'articles' in n_res2 and len(n_res2['articles']) > 0:
@@ -410,7 +473,6 @@ def smart_route():
             w_res = requests.get(w_url).json()
             weather_code = w_res.get('current_weather', {}).get('weathercode', 0)
             
-            # WMO Weather interpretation codes (e.g. 61+ is Rain/Snow)
             if weather_code >= 61:
                 weather_alert = f"Heavy Rain/Snow detected (Code {weather_code}) 2.5km ahead!"
                 weather_marker_lat, weather_marker_lng = inc_lat, inc_lng
@@ -419,29 +481,39 @@ def smart_route():
         except Exception as e:
             print("Weather API error:", e)
 
-        # 2. Open Source Rerouting (OSRM Detour)
-        detour_coords_str = f"{o_lng},{o_lat}"
-        if s_lat is not None:
-            detour_coords_str += f";{s_lng},{s_lat}"
-            
+        # 2. Detour Rerouting
         has_obstruction = weather_marker_lat or "ALERT" in news_alert
         if has_obstruction and len(primary_coords) > 2:
-            # Re-Routing Fundamentals: Detour -> 5km Merge Point
-            detour_lat = incident_coord[0] + 0.025
-            detour_lng = incident_coord[1] + 0.025
-            detour_coords_str += f";{detour_lng},{detour_lat}"
-            
-            # Hit the exact 5km target down the route to merge back safely
-            detour_coords_str += f";{merge_coord[1]},{merge_coord[0]}"
-            
-        detour_coords_str += f";{d_lng},{d_lat}"
-        
-        osrm_alt_url = f"http://router.project-osrm.org/route/v1/driving/{detour_coords_str}?overview=full&geometries=polyline"
-        res2 = requests.get(osrm_alt_url).json()
-        
-        alt_coords = []
-        if res2.get('code') == 'Ok' and res2.get('routes'):
-            alt_coords = polyline.decode(res2['routes'][0]['geometry'])
+            if engine_used == "NetworkX A* (Local Precision)":
+                # NetworkX A* Detour
+                try:
+                    inc_node = ox.distance.nearest_nodes(G, incident_coord[1], incident_coord[0])
+                    G_detour = G.copy()
+                    nodes_to_remove = [inc_node]
+                    try:
+                        nodes_to_remove.extend(list(G_detour.neighbors(inc_node)))
+                    except nx.NetworkXError:
+                        pass
+                    G_detour.remove_nodes_from(nodes_to_remove)
+                    if s_lat is not None:
+                        alt_nodes = nx.astar_path(G_detour, o_node, d_node, heuristic=heuristic, weight='length')
+                    else:
+                        alt_nodes = nx.astar_path(G_detour, o_node, d_node, heuristic=heuristic, weight='length')
+                    alt_coords = [[G_detour.nodes[n]['y'], G_detour.nodes[n]['x']] for n in alt_nodes]
+                except nx.NetworkXNoPath:
+                    pass
+            else:
+                # OSRM Detour
+                detour_coords_str = f"{o_lng},{o_lat}"
+                if s_lat is not None:
+                    detour_coords_str += f";{s_lng},{s_lat}"
+                detour_lat = incident_coord[0] + 0.025
+                detour_lng = incident_coord[1] + 0.025
+                detour_coords_str += f";{detour_lng},{detour_lat};{merge_coord[1]},{merge_coord[0]};{d_lng},{d_lat}"
+                osrm_alt_url = f"http://router.project-osrm.org/route/v1/driving/{detour_coords_str}?overview=full&geometries=polyline"
+                res2 = requests.get(osrm_alt_url).json()
+                if res2.get('code') == 'Ok' and res2.get('routes'):
+                    alt_coords = polyline.decode(res2['routes'][0]['geometry'])
 
         # 3. Gemini Analysis Integration
         gemini_analysis = ""

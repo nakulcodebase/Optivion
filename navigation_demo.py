@@ -16,8 +16,8 @@ if not API_KEY:
 print("Google Maps API key loaded.")
 
 # Define starting point and destination
-origin = "San Francisco, CA"
-destination = "San Jose, CA"
+origin = "Bsf Academy Tekanpur Gwalior"
+destination = "Hyderabad"
 
 print(f"Requesting directions from '{origin}' to '{destination}' via Routes API...")
 
