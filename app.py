@@ -3,9 +3,8 @@ import googlemaps
 import folium
 import polyline
 import os
-import math
 import json
-import base64
+import math
 from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, db as rtdb
@@ -20,34 +19,34 @@ API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY', '')
 # Initialize Firebase Admin
 db = None
 try:
-    cred = None
+    service_account_info = None
     
-    # Try to load from environment variable (Vercel)
-    firebase_key_base64 = os.environ.get('FIREBASE_SERVICE_ACCOUNT_BASE64')
-    if firebase_key_base64:
-        # Decode base64 to JSON
-        firebase_key_json = base64.b64decode(firebase_key_base64).decode('utf-8')
-        firebase_key_dict = json.loads(firebase_key_json)
-        cred = credentials.Certificate(firebase_key_dict)
-        print("Firebase initialized from environment variable (Vercel)")
+    # Try environment variable first (Vercel)
+    firebase_key_env = os.environ.get('FIREBASE_SERVICE_ACCOUNT_KEY')
+    if firebase_key_env:
+        service_account_info = json.loads(firebase_key_env)
+        print("✅ Firebase: Using environment variable (Vercel)")
     
-    # Fall back to local file (for local development)
+    # Fall back to local file (Development)
     elif os.path.exists('firebase-key.json'):
-        cred = credentials.Certificate('firebase-key.json')
-        print("Firebase initialized from local file")
+        with open('firebase-key.json') as f:
+            service_account_info = json.load(f)
+        print("✅ Firebase: Using local file (Development)")
     
-    # Initialize app if credentials were loaded
-    if cred:
+    # Initialize Firebase if credentials loaded
+    if service_account_info:
         if not firebase_admin._apps:
+            cred = credentials.Certificate(service_account_info)
             firebase_admin.initialize_app(cred, {
                 'databaseURL': 'https://optivion-4ae9f-default-rtdb.asia-southeast1.firebasedatabase.app'
             })
         db = rtdb.reference()
-        print("Firebase Realtime Database connected successfully!")
+        print("✅ Firebase Realtime Database connected successfully!")
     else:
-        print("Warning: No Firebase credentials found")
+        print("⚠️  Firebase: No credentials found")
+        
 except Exception as e:
-    print(f"Error initializing Firebase RTDB: {e}")
+    print(f"❌ Firebase Error: {e}")
 
 # Mock Database for drivers and their assigned trips
 drivers_db = {}
