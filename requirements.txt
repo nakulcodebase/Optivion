@@ -5,3 +5,4 @@ polyline
 python-dotenv
 requests
 firebase-admin
+networkx
